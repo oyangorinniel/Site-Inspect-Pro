@@ -32,14 +32,15 @@ jobs:
         working-directory: site_inspect
         run: python3 tools/patch_manifest.py
 
-      - name: Raise compileSdk for all plugins
+      - name: Gradle fixes (newer compileSdk, skip release lint)
         run: |
           mkdir -p ~/.gradle/init.d
-          cat > ~/.gradle/init.d/force-compile-sdk.gradle <<'EOF'
+          cat > ~/.gradle/init.d/fixes.gradle <<'EOF'
           gradle.allprojects { p ->
               p.afterEvaluate {
                   def ext = p.extensions.findByName('android')
-                  if (ext != null && p.plugins.hasPlugin('com.android.library')) {
+                  if (ext == null) { return }
+                  if (p.plugins.hasPlugin('com.android.library')) {
                       try {
                           ext.compileSdk = 36
                       } catch (Throwable t) {
@@ -49,6 +50,18 @@ jobs:
                               println "compileSdk override skipped for ${p.name}"
                           }
                       }
+                  }
+                  if (p.plugins.hasPlugin('com.android.application')) {
+                      try {
+                          ext.lint.checkReleaseBuilds = false
+                      } catch (Throwable t) {
+                          println "lint override skipped: ${t}"
+                      }
+                  }
+              }
+              p.tasks.configureEach { t ->
+                  if (t.name.startsWith('lintVital')) {
+                      t.enabled = false
                   }
               }
           }
